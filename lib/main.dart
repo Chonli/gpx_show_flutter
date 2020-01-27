@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -5,7 +6,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong/latlong.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:gpx/gpx.dart';
-import 'package:flutter_map_marker_cluster/flutter_map_marker_cluster.dart';
+import 'package:path/path.dart' as path;
 
 void main() => runApp(MyApp());
 
@@ -48,24 +49,69 @@ class _MyHomePageState extends State<MyHomePage> {
       try {
         final file = File(filePath);
         final contents = await file.readAsString();
-        var xmlGpx = GpxReader().fromString(contents);
-        print(xmlGpx);
-        //center
-        final first = xmlGpx.trks.first.trksegs.first.trkpts.first;
-        _mapController.move(LatLng(first.lat, first.lon), 13.0);
+        if (path.extension(filePath) == '.gpx') {
+          var xmlGpx = GpxReader().fromString(contents);
+          print(xmlGpx);
+          //center
+          final first = xmlGpx.trks.first.trksegs.first.trkpts.first;
+          _mapController.move(LatLng(first.lat, first.lon), 13.0);
 
-        //trace gpx
-        for (var trk in xmlGpx.trks) {
-          for (var trkseg in trk.trksegs) {
-            List<LatLng> line = [];
-            for (var pt in trkseg.trkpts) {
-              line.add(LatLng(pt.lat, pt.lon));
+          //trace gpx
+          for (var trk in xmlGpx.trks) {
+            for (var trkseg in trk.trksegs) {
+              List<LatLng> line = [];
+              for (var pt in trkseg.trkpts) {
+                line.add(LatLng(pt.lat, pt.lon));
+              }
+              _traceGPX.add(Polyline(points: line, color: Colors.red));
             }
-            _traceGPX.add(Polyline(points: line, color: Colors.red));
           }
+        } else if (path.extension(filePath) == '.json') {
+          var result = jsonDecode(contents);
+          List<LatLng> line = [];
+          for (var position in result) {
+            line.add(LatLng(position['latitude'], position['longitude']));
+          }
+          _traceGPX.add(Polyline(points: line, color: Colors.red));
+        } else {
+          showDialog(
+            context: context,
+            builder: (BuildContext context) {
+              // return object of type Dialog
+              return AlertDialog(
+                title: new Text("Erreur de fichier"),
+                content: new Text("Extension de fichier inconnu"),
+                actions: <Widget>[
+                  new FlatButton(
+                    child: new Text("Close"),
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                    },
+                  ),
+                ],
+              );
+            },
+          );
         }
       } catch (e) {
-        print('error read gpx: ' + e.toString());
+        showDialog(
+          context: context,
+          builder: (BuildContext context) {
+            // return object of type Dialog
+            return AlertDialog(
+              title: new Text("Erreur de fichier"),
+              content: new Text("Erreur de lecture de fichier"),
+              actions: <Widget>[
+                new FlatButton(
+                  child: new Text("Close"),
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                  },
+                ),
+              ],
+            );
+          },
+        );
       }
     }
   }
@@ -79,17 +125,13 @@ class _MyHomePageState extends State<MyHomePage> {
       body: Center(
         child: FlutterMap(
           options: MapOptions(
-            center: LatLng(51.5, -0.09),
+            center: LatLng(45.05, 6.3),
             zoom: 13.0,
           ),
           layers: [
             TileLayerOptions(
-              urlTemplate: "https://api.tiles.mapbox.com/v4/"
-                  "{id}/{z}/{x}/{y}@2x.png?access_token={accessToken}",
-              additionalOptions: {
-                'accessToken': '<key here>',
-                'id': 'mapbox.streets',
-              },
+              urlTemplate: "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
+              subdomains: ["a", "b", "c"],
             ),
             PolylineLayerOptions(polylines: _traceGPX)
           ],
